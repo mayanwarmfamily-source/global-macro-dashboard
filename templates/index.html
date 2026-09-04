@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ settings.title }}</title>
+    <!-- Apache ECharts 5 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root[data-theme="dark"] {
+            --bg-primary: #0a0f1d;
+            --bg-card: #121929;
+            --border-color: #1e293b;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-purple: #c084fc;
+            --ai-box-bg: rgba(56, 189, 248, 0.05);
+            --ai-border: rgba(56, 189, 248, 0.2);
+        }
+
+        :root[data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-card: #ffffff;
+            --border-color: #e2e8f0;
+            --text-main: #0f172a;
+            --text-sub: #64748b;
+            --accent-blue: #0284c7;
+            --accent-purple: #9333ea;
+            --ai-box-bg: #f0f9ff;
+            --ai-border: #bae6fd;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            padding: 24px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header p { font-size: 0.9rem; color: var(--text-sub); margin-top: 4px; }
+        .update-time { font-size: 0.85rem; color: var(--text-sub); }
+
+        /* AI 分析报告区域 */
+        .ai-section {
+            background-color: var(--ai-box-bg);
+            border: 1px solid var(--ai-border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            line-height: 1.7;
+        }
+
+        .ai-section h2 { font-size: 1.3rem; margin-bottom: 16px; color: var(--accent-blue); display: flex; align-items: center; gap: 8px; }
+        .ai-section h3 { font-size: 1.1rem; margin: 16px 0 8px 0; color: var(--text-main); }
+        .ai-section h4 { font-size: 0.95rem; margin: 12px 0 6px 0; color: var(--accent-purple); }
+        .ai-section p { font-size: 0.92rem; color: var(--text-main); margin-bottom: 8px; }
+
+        /* Dashboard 栅格布局 */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-container { grid-template-columns: 1fr; }
+        }
+
+        .chart-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        .chart-card h3 { font-size: 1rem; color: var(--text-main); margin-bottom: 12px; padding-left: 8px; border-left: 4px solid var(--accent-blue); }
+        .chart-box { width: 100%; height: 320px; }
+
+        .footer { text-align: center; margin-top: 40px; color: var(--text-sub); font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>
+            <h1>{{ settings.title }}</h1>
+            <p>{{ settings.subtitle }}</p>
+        </div>
+        <div class="update-time">
+            更新时间: <strong>{{ updated_at }}</strong> (UTC)
+        </div>
+    </div>
+
+    <!-- Gemini AI 分析模块 -->
+    <div class="ai-section">
+        <h2>🤖 Gemini 2.5 穿透式全球宏观逻辑解读</h2>
+        <div class="ai-content">
+            {{ ai_analysis | safe }}
+        </div>
+    </div>
+
+    <!-- 图表矩阵 -->
+    <div class="grid-container">
+        {% for chart_id, chart in charts.items() %}
+        <div class="chart-card">
+            <h3>{{ chart.title }}</h3>
+            <div id="{{ chart_id }}" class="chart-box"></div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="footer">
+        Powered by Python, ECharts, Gemini 2.5 & GitHub Actions | Designed for Macro Analysis
+    </div>
+
+    <!-- ECharts 动态渲染逻辑 -->
+    <script>
+        const chartsData = {{ charts | tojson }};
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+        Object.keys(chartsData).forEach(id => {
+            const chartConf = chartsData[id];
+            const dom = document.getElementById(id);
+            if (!dom) return;
+
+            const myChart = echarts.init(dom, isDark ? 'dark' : null, { backgroundColor: 'transparent' });
+
+            // 构造 Series 结构
+            const seriesConfig = chartConf.series.map(s => {
+                let conf = {
+                    name: s.name,
+                    type: s.type || 'line',
+                    data: s.data,
+                    smooth: true,
+                    showSymbol: false,
+                    yAxisIndex: s.axis || 0
+                };
+                if (s.color) {
+                    conf.itemStyle = { color: s.color };
+                    conf.lineStyle = { color: s.color };
+                }
+                if (chartConf.type === 'area_zero') {
+                    conf.areaStyle = { opacity: 0.25 };
+                }
+                return conf;
+            });
+
+            // 检查是否有双 Y 轴
+            const hasDualAxis = chartConf.series.some(s => s.axis === 1);
+
+            const option = {
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                legend: { top: 0, textStyle: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 11 } },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    data: chartConf.x_axis,
+                    axisLine: { lineStyle: { color: isDark ? '#334155' : '#cbd5e1' } }
+                },
+                yAxis: [
+                    {
+                        type: 'value',
+                        scale: true,
+                        splitLine: { lineStyle: { color: isDark ? '#1e293b' : '#f1f5f9' } }
+                    },
+                    ...(hasDualAxis ? [{
+                        type: 'value',
+                        scale: true,
+                        splitLine: { show: false }
+                    }] : [])
+                ],
+                series: seriesConfig
+            };
+
+            myChart.setOption(option);
+            window.addEventListener('resize', () => myChart.resize());
+        });
+    </script>
+</body>
+</html>

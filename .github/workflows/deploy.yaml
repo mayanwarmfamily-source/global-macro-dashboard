@@ -1,0 +1,59 @@
+name: Deploy Global Macro Dashboard to GitHub Pages
+
+on:
+  # 1. 定时触发：每天 UTC 时间 00:00 (北京时间早上 08:00) 自动运行
+  schedule:
+    - cron: '0 0 * * *'
+  
+  # 2. 手动触发：允许在 GitHub Actions 页面随时手动点击运行
+  workflow_dispatch:
+
+  # 3. 代码提交触发：每次向 main 分支 Push 代码时自动构建
+  push:
+    branches:
+      - main
+
+# 设置 GitHub Token 的读写权限，以便发布到 GitHub Pages
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: 拉取仓库代码
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: 设置 Python 3.11 环境
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip' # 开启 pip 缓存，提升后续运行速度
+
+      # Step 3: 安装依赖包
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Step 4: 执行一键主程序 (注入 Secrets)
+      - name: Run Macro Dashboard Pipeline
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python main.py
+
+      # Step 5: 将 public 目录部署至 GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          keep_files: false
+          commit_message: "chore: auto-update macro dashboard [skip ci]"
