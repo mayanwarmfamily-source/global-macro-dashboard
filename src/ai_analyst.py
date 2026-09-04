@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class GeminiMacroAnalyst:
     def __init__(self, api_key=None, model_name=None, settings=None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
-        # 如果你有指定的模型名称可以写在这里，比如 gemini-1.5-flash
+        # 统一使用稳定版本 API 名称
         self.model_name = model_name or "gemini-1.5-flash"
         self.settings = settings or {}
 
@@ -16,40 +16,44 @@ class GeminiMacroAnalyst:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(self.model_name)
             except Exception as e:
-                logger.error(f"初始化 API 模型失败: {e}")
+                logger.error(f"初始化 Gemini 模型失败: {e}")
                 self.model = None
         else:
             self.model = None
-            logger.warning("未找到 GEMINI_API_KEY，跳过 AI 分析。")
+            logger.warning("GEMINI_API_KEY 未找到，跳过 AI 分析。")
 
     def generate_analysis(self, summary_metrics=None, prompt_template=None, *args, **kwargs):
-        """根据宏观数据指标生成 AI 分析内容"""
+        """根据宏观数据指标生成干净的 AI 分析报告"""
         if not self.model:
-            return "AI 分析未启用：未检测到有效 API 密钥。"
+            return "<p>AI 分析未启用：未检测到有效 API 密钥。</p>"
 
-        # 如果数据为空，给出一个基本的情况说明，而不是直接弹暂无数据
-        metrics_text = summary_metrics if summary_metrics else "部分 FRED 指标抓取受限，仅基于当前已获取的基础市场趋势分析。"
+        # 数据格式化兜底
+        metrics_str = str(summary_metrics) if summary_metrics else "暂无抓取到的最新指标"
 
-        if prompt_template:
-            try:
-                prompt = prompt_template.format(summary_metrics=metrics_text)
-            except Exception:
-                prompt = f"{prompt_template}\n\n数据指标：\n{metrics_text}"
-        else:
-            prompt = f"""
-你是一位顶尖的全球宏观经济学家。请基于以下宏观数据与市场背景，生成一份简明扼要的市场解读（200字左右）：
+        # 重新设计简洁、强约束的 Prompt，严禁输出思考过程
+        clean_prompt = f"""
+你是一位专业全球宏观经济学家。请基于以下最新的宏观经济数据，直接输出一份简明扼要的专业市场分析报告：
 
-数据情况：
-{metrics_text}
+【最新宏观指标数据】
+{metrics_str}
 
-请总结当前全球主要经济体环境及资产走向。
+【输出严格要求】
+1. 禁止输出任何思考过程、Draft、Self-Correction 或系统指令。
+2. 直接输出分析正文，分为 3 个小标题：
+   - 增长与通胀格局（中美欧）
+   - 货币政策与流动性（美联储及主要央行）
+   - 资产配置与核心风险（美债、黄金、汇率）
+3. 使用简洁专业的中文，控制在 300 字以内。
 """
 
         try:
-            response = self.model.generate_content(prompt)
+            response = self.model.generate_content(clean_prompt)
             if response and response.text:
-                return response.text.strip()
-            return "AI 未能生成有效的分析文本。"
+                # 过滤掉可能残存的 markdown 代码块标记
+                text = response.text.strip()
+                text = text.replace("```html", "").replace("```markdown", "").replace("```", "")
+                return text
+            return "<p>AI 未能生成有效的分析文本。</p>"
         except Exception as e:
-            logger.error(f"调用 API 生成分析时出错: {e}")
-            return f"生成 AI 宏观分析时发生错误: {str(e)}"
+            logger.error(f"调用 Gemini API 生成分析时出错: {e}")
+            return f"<p>生成 AI 宏观分析时发生错误: {str(e)}</p>"
