@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 全球宏观 Dashboard 一键调度主程序 (main.py)
-自动完成配置加载、多源数据抓取、数据清洗对齐、Gemini AI 分析生成与 HTML 静态页面编译。
+自动完成配置加载、22个核心指标抓取、数据清洗对齐、Gemini AI 分析生成与 Plotly HTML 静态页面编译。
 """
 
 import os
@@ -9,7 +9,8 @@ import sys
 import yaml
 import logging
 
-from src.fetcher import DataFetcher
+# 导入全新的数据抓取模块
+from src.data_fetcher import MacroDataFetcher
 from src.processor import DataProcessor
 from src.ai_analyst import GeminiMacroAnalyst
 from src.builder import SiteBuilder
@@ -23,58 +24,51 @@ logging.basicConfig(
 
 def load_config(config_path: str = "config.yaml") -> dict:
     """加载配置文件"""
-    if not os.path.exists(config_path):
+    if not os.path.path.exists(config_path) if hasattr(os.path, 'path') else not os.path.exists(config_path):
         logging.error(f"❌ 配置文件未找到: {config_path}")
-        sys.exit(1)
+        return {}
+    
     with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        try:
+            return yaml.safe_load(f)
+        except Exception as e:
+            logging.error(f"❌ 解析 config.yaml 失败: {e}")
+            return {}
 
 def main():
     logging.info("==================================================")
-    logging.info("🚀 全球宏观与金融条件分析面板 Dashboard - 开始运行")
+    logging.info("🚀 全球宏观数据与金融条件分析面板 Dashboard - 开始运行")
     logging.info("==================================================")
 
-    # 1. 加载 YAML 配置
+    # 1. 加载配置
     config = load_config()
-    settings = config.get("settings", {})
-    charts_config = config.get("charts", [])
-    ai_config = config.get("ai_analyst", {})
 
-    # 2. 读取环境变量中的 API Key
-    fred_api_key = os.getenv("FRED_API_KEY")
-    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    # 2. 抓取 22 个核心宏观指标数据 (8Q / 12M / 1Y Natural Edge)
+    logging.info("\n--- 步骤 1: 开始抓取 22 个宏观与金融指标 ---")
+    fetcher = MacroDataFetcher()
+    raw_data = fetcher.fetch_all_data()
 
-    if not fred_api_key:
-        logging.warning("⚠️ 提示: 未检测到 FRED_API_KEY 环境变量，部分 FRED 序列可能无法获取。")
-    if not gemini_api_key:
-        logging.warning("⚠️ 提示: 未检测到 GEMINI_API_KEY 环境变量，AI 宏观分析报告将跳过生成。")
+    if not raw_data:
+        logging.error("❌ 未抓取到任何有效数据，程序终止！")
+        sys.exit(1)
 
-    # 3. 初始化并运行数据抓取引擎
-    fetcher = DataFetcher(fred_api_key=fred_api_key)
-    raw_data = fetcher.fetch_all(charts_config)
+    # 3. 数据清洗与格式化对齐
+    logging.info("\n--- 步骤 2: 数据清洗与指标对齐 ---")
+    processor = DataProcessor(raw_data)
+    processed_data = processor.process_all() if hasattr(processor, 'process_all') else raw_data
 
-    # 4. 初始化并运行数据清洗与对齐引擎
-    processor = DataProcessor(settings=settings)
-    cleaned_charts, summary_metrics = processor.process(raw_data, charts_config)
+    # 4. Gemini AI 分析研判生成
+    logging.info("\n--- 步骤 3: 调用 AI 生成宏观研判解读 ---")
+    analyst = GeminiMacroAnalyst(config=config)
+    ai_insights = analyst.generate_insights(processed_data) if hasattr(analyst, 'generate_insights') else {}
 
-    # 5. 调用 Gemini 2.5 宏观分析引擎
-    ai_analyst = GeminiMacroAnalyst(
-        api_key=gemini_api_key,
-        model_name=ai_config.get("model", "gemini-2.5-flash")
-    )
-    prompt_template = ai_config.get("prompt_template", "")
-    ai_analysis_html = ai_analyst.generate_analysis(summary_metrics, prompt_template)
-
-    # 6. 构建并导出 HTML 静态页面
-    builder = SiteBuilder()
-    builder.build(
-        config=config,
-        charts_data=cleaned_charts,
-        ai_analysis_html=ai_analysis_html
-    )
+    # 5. 生成 Plotly 交互图表与多页 HTML 简报
+    logging.info("\n--- 步骤 4: 编译静态 HTML 页面与 Plotly 图表 ---")
+    builder = SiteBuilder(config=config)
+    builder.build_site(processed_data, ai_insights) if hasattr(builder, 'build_site') else None
 
     logging.info("==================================================")
-    logging.info("✨ 所有流程顺利执行完毕！产物已输出至 public/index.html")
+    logging.info("🎉 所有流程顺利执行完毕！页面已输出至 public/ 目录")
     logging.info("==================================================")
 
 if __name__ == "__main__":
