@@ -5,28 +5,31 @@ import google.generativeai as genai
 logger = logging.getLogger(__name__)
 
 class GeminiMacroAnalyst:
-    def __init__(self, api_key=None):
-        # 优先使用传入的 api_key，若无则从环境变量 GEMINI_API_KEY 读取
+    def __init__(self, api_key=None, model_name=None, settings=None):
+        # 兼容 main.py 传进来的各种参数
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.model_name = model_name or "gemini-1.5-flash"
+        self.settings = settings or {}
+
         if self.api_key:
-            genai.configure(api_key=self.api_key)
-            # 使用标准的 gemini-1.5-flash 模型，兼顾分析速度与质量
-            self.model = genai.GenerativeModel("gemini-1.5-flash")
+            try:
+                genai.configure(api_key=self.api_key)
+                self.model = genai.GenerativeModel(self.model_name)
+            except Exception as e:
+                logger.error(f"初始化 Gemini 模型失败: {e}")
+                self.model = None
         else:
             self.model = None
-            logger.warning("GEMINI_API_KEY 未找到，AI 自动分析功能将被跳过。")
+            logger.warning("GEMINI_API_KEY 未找到，跳过 AI 分析。")
 
-    def generate_summary(self, summary_metrics):
-        """
-        根据传入的宏观数据指标生成简明扼要的宏观经济摘要。
-        """
+    def generate_summary(self, summary_metrics=None, *args, **kwargs):
+        """根据宏观数据指标生成洞察报告"""
         if not self.model:
             return "AI 分析未启用：未检测到有效 API 密钥。"
 
         if not summary_metrics:
             return "当前暂无足够的宏观数据用于分析。"
 
-        # 构建发送给 AI 的提示词
         prompt = f"""
 你是一位顶尖的全球宏观经济学家。请根据以下最新的宏观经济与金融指标数据，提供一份简明扼要、逻辑严密的市场洞察报告（字数控制在 200-300 字以内）：
 
