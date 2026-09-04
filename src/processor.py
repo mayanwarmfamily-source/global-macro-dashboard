@@ -2,22 +2,31 @@ import pandas as pd
 import numpy as np
 
 class DataProcessor:
-    def __init__(self, raw_data, charts_config):
-        self.raw_data = raw_data
-        self.charts_config = charts_config
+    def __init__(self, raw_data=None, charts_config=None, settings=None):
+        self.raw_data = raw_data if raw_data is not None else {}
+        self.charts_config = charts_config if charts_config is not None else {}
+        self.settings = settings or {}
 
-    def process():
-        pass
+    def process(self, raw_data=None, charts_config=None):
+        data = raw_data if raw_data is not None else self.raw_data
+        config = charts_config if charts_config is not None else self.charts_config
+        return process(data, config)
 
 def process(raw_data, charts_config):
     cleaned_charts = {}
     summary_metrics = {}
 
+    if not isinstance(charts_config, dict):
+        return cleaned_charts, summary_metrics
+
     for chart_id, config in charts_config.items():
+        if not isinstance(config, dict):
+            continue
+            
         series_list = []
         for series_cfg in config.get('series', []):
             s_id = series_cfg.get('id')
-            if s_id in raw_data and not raw_data[s_id].empty:
+            if s_id in raw_data and isinstance(raw_data[s_id], pd.Series) and not raw_data[s_id].empty:
                 s = raw_data[s_id].copy()
                 s.name = series_cfg.get('name', s_id)
                 series_list.append(s)
@@ -26,16 +35,13 @@ def process(raw_data, charts_config):
             continue
 
         df = pd.concat(series_list, axis=1).sort_index()
-        
-        # 填充缺失值并做前向/后向填充
         df = df.ffill().bfill()
 
-        # 取近 365 天的数据（用兼容新版 pandas 的切片逻辑替换 .last()）
+        # 兼容新版 pandas 的近 365 天切片逻辑
         if isinstance(df.index, pd.DatetimeIndex) and len(df) > 0:
             cutoff_date = df.index[-1] - pd.Timedelta(days=365)
             df = df[df.index >= cutoff_date]
 
-        # 整理图表数据结构
         cleaned_charts[chart_id] = {
             'title': config.get('title', chart_id),
             'type': config.get('type', 'line'),
@@ -48,7 +54,6 @@ def process(raw_data, charts_config):
             ]
         }
 
-        # 记录最新的关键摘要指标
         if not df.empty:
             last_row = df.iloc[-1]
             for col in df.columns:
